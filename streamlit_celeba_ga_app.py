@@ -848,13 +848,16 @@ def main():
         st.stop()
 
     st.subheader("1. Décrire le visage cible")
-    face_description_prompt = st.text_area(
-        "Description du visage",
-        key="face_description_prompt",
-        placeholder="Ex: femme jeune, cheveux blonds, lunettes, sourire léger, pas de barbe",
-        help="Décris la personne. Mistral choisit automatiquement les attributs CelebA et génère la population initiale.",
-    )
-    if st.button("Générer les visages", type="primary"):
+    with st.form("prompt_form"):
+        face_description_prompt = st.text_input(
+            "Description du visage",
+            key="face_description_prompt",
+            placeholder="Ex: femme jeune, cheveux blonds, lunettes, sourire léger, pas de barbe",
+            help="Appuie sur Entrée pour lancer la génération.",
+        )
+        generate_from_prompt = st.form_submit_button("Générer les visages", type="primary")
+
+    if generate_from_prompt:
         if not face_description_prompt.strip():
             st.warning("Ajoute d'abord une description du visage.")
         elif not mistral_api_key.strip():
