@@ -860,7 +860,7 @@ def main():
         elif not mistral_api_key.strip():
             st.warning("Ajoute la clé API Mistral dans `.env.local`.")
         else:
-            with st.spinner("Appel Mistral en cours..."):
+            with st.spinner("Génération en cours..."):
                 try:
                     auto_form_values = infer_form_values_from_prompt(
                         prompt_text=face_description_prompt,
