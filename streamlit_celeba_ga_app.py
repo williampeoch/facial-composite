@@ -530,7 +530,7 @@ def project_latent_to_manifold(
 ) -> torch.Tensor:
     z = z_cpu.unsqueeze(0).to(device)
     with torch.no_grad():
-        for _ in range(max(1, steps)):
+        for _ in range(max(0, steps)):
             recon = model.decode(z)
             mu, _ = model.encode(recon)
             z = (1.0 - blend) * z + blend * mu
@@ -573,7 +573,7 @@ def create_next_generation(
     for i in range(elite_count):
         elite = population[i]
         elite_z = elite.z.clone()
-        if projection_blend > 0:
+        if projection_blend > 0 and projection_steps > 0:
             elite_z = project_latent_to_manifold(
                 model=model,
                 z_cpu=elite_z,
@@ -608,7 +608,7 @@ def create_next_generation(
         p2 = random.choice(parent_pool)
         child_z = crossover(p1.z, p2.z)
         child_z = mutate(child_z, mutation_std=mutation_std, clamp_value=latent_clamp)
-        if projection_blend > 0:
+        if projection_blend > 0 and projection_steps > 0:
             child_z = project_latent_to_manifold(
                 model=model,
                 z_cpu=child_z,
@@ -659,7 +659,16 @@ def render_population(model, population: List[Individual], device: torch.device)
     st.subheader(f"Population courante — génération {st.session_state.generation}")
     decoded_images = [decode_latent_tensor(model, ind.z, device) for ind in population]
 
-    cols_per_row = 3
+    pop_len = len(population)
+    if pop_len <= 4:
+        cols_per_row = 2
+    elif pop_len <= 6:
+        cols_per_row = 3
+    elif pop_len <= 9:
+        cols_per_row = 4
+    else:
+        cols_per_row = 5
+
     chosen_idx = None
     for row_start in range(0, len(population), cols_per_row):
         cols = st.columns(cols_per_row)
@@ -794,7 +803,7 @@ def main():
         st.subheader("Anti-bruit")
         latent_clamp = st.slider("Clamp latent", min_value=1.5, max_value=5.0, value=2.8, step=0.1)
         projection_blend = st.slider("Projection anti-bruit", min_value=0.0, max_value=1.0, value=0.65, step=0.05)
-        projection_steps = st.slider("Passes de projection", min_value=1, max_value=3, value=1, step=1)
+        projection_steps = st.slider("Passes de projection", min_value=0, max_value=3, value=1, step=1)
         remove_parent_background = st.checkbox(
             "Retirer le background du parent sélectionné",
             value=True,
@@ -952,22 +961,6 @@ def main():
             except Exception as exc:
                 st.exception(exc)
 
-        with st.expander("Détails techniques"):
-            st.markdown(
-                f"""
-- Device: `{DEVICE}`
-- Population size: `{pop_size}`
-- Elite size: `{elite_size}`
-- Mutation std: `{mutation_std}`
-- Latent clamp: `{latent_clamp}`
-- Projection blend: `{projection_blend}`
-- Projection steps: `{projection_steps}`
-- Remove parent background: `{remove_parent_background}`
-- Person mask threshold: `{person_mask_threshold}`
-- Random injections: `{random_injection_count}`
-- Generation: `{st.session_state.generation}`
-                """
-            )
     else:
         st.warning("Aucune population encore générée.")
 
