@@ -671,10 +671,6 @@ def render_population(model, population: List[Individual], device: torch.device)
             is_selected = st.session_state.clicked_index == absolute_idx
             with col:
                 st.image(tensor_to_display_image(img), use_container_width=True)
-                st.caption(
-                    f"idx={absolute_idx} | source={individual.source} | "
-                    f"score_init={individual.score} | image_id={individual.image_id}"
-                )
                 if st.button(
                     "Choisir ce parent",
                     key=f"choose_parent_g{st.session_state.generation}_i{absolute_idx}",
@@ -783,16 +779,13 @@ def main():
             st.session_state[key] = value
     st.session_state["mistral_api_key"] = app_config.get("mistral_api_key", "")
 
-    st.title("Portrait robot sur latent VAE + algorithme génétique")
-    st.write(
-        "Prompt texte → extraction automatique des attributs CelebA via Mistral → population initiale cohérente → évolution génétique."
-    )
+    st.title("Portrait robot")
 
     with st.sidebar:
         st.header("Configuration")
-        model_path = st.text_input("Chemin du modèle .pth", value=DEFAULT_MODEL_PATH)
-        attr_csv_path = st.text_input("Chemin du CSV d'attributs", value=DEFAULT_ATTR_CSV)
-        image_dir = st.text_input("Dossier des images CelebA", value=DEFAULT_IMAGE_DIR)
+        model_path = DEFAULT_MODEL_PATH
+        attr_csv_path = DEFAULT_ATTR_CSV
+        image_dir = DEFAULT_IMAGE_DIR
 
         pop_size = st.slider("Taille de population", min_value=4, max_value=12, value=6, step=1)
         elite_size = st.slider("Nombre d'élites", min_value=1, max_value=4, value=2, step=1)
@@ -814,22 +807,10 @@ def main():
             step=0.01,
         )
 
-        st.markdown("---")
-        st.subheader("Auto-attributs (Mistral)")
         mistral_api_key = str(st.session_state.get("mistral_api_key", "")).strip()
-        if mistral_api_key:
-            st.caption("Clé API Mistral chargée depuis `.env.local`.")
-        else:
-            st.caption("Clé API Mistral absente. Ajoute-la dans `.env.local`.")
-        mistral_model = st.text_input("Modèle Mistral", key="mistral_model")
-        mistral_endpoint = st.text_input("Endpoint Mistral", key="mistral_endpoint")
-        mistral_timeout_seconds = st.number_input(
-            "Timeout appel Mistral (secondes)",
-            min_value=5,
-            max_value=120,
-            step=1,
-            key="mistral_timeout_seconds",
-        )
+        mistral_model = str(st.session_state.get("mistral_model", DEFAULT_MISTRAL_MODEL))
+        mistral_endpoint = str(st.session_state.get("mistral_endpoint", DEFAULT_MISTRAL_ENDPOINT))
+        mistral_timeout_seconds = int(st.session_state.get("mistral_timeout_seconds", DEFAULT_MISTRAL_TIMEOUT))
 
         if st.button("Réinitialiser la session"):
             reset_session_state()
@@ -868,12 +849,12 @@ def main():
 
     st.subheader("1. Décrire le visage cible")
     face_description_prompt = st.text_area(
-        "Prompt visage (langage naturel)",
+        "Description du visage",
         key="face_description_prompt",
         placeholder="Ex: femme jeune, cheveux blonds, lunettes, sourire léger, pas de barbe",
         help="Décris la personne. Mistral choisit automatiquement les attributs CelebA et génère la population initiale.",
     )
-    if st.button("Générer la population depuis le prompt", type="primary"):
+    if st.button("Générer les visages", type="primary"):
         if not face_description_prompt.strip():
             st.warning("Ajoute d'abord une description du visage.")
         elif not mistral_api_key.strip():
@@ -918,11 +899,6 @@ def main():
             st.caption(f"Attributs détectés automatiquement: {auto_selected}")
         else:
             st.caption("Aucun attribut explicite détecté dans le prompt (tout en 'Indifférent').")
-
-    if st.session_state.selected_attrs:
-        st.info(f"Attributs actifs: {st.session_state.selected_attrs}")
-    else:
-        st.caption("Aucun attribut imposé pour l’instant.")
 
     population = st.session_state.population
     if population:
