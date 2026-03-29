@@ -1,9 +1,7 @@
 import json
 import os
 import random
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
 from urllib import error, request
 
 import pandas as pd
@@ -104,28 +102,28 @@ class ConvVAE128(nn.Module):
         return x_recon, mu, logvar
 
 
-@dataclass
 class Individual:
-    image_id: str
-    z: torch.Tensor
-    source: str
-    score: int
+    def __init__(self, image_id, z, source, score):
+        self.image_id = image_id
+        self.z = z
+        self.source = source
+        self.score = score
 
 
 # =========================
 # Utilities
 # =========================
-def denorm(x: torch.Tensor) -> torch.Tensor:
+def denorm(x):
     return (x * 0.5 + 0.5).clamp(0, 1)
 
 
-def tensor_to_display_image(img_tensor: torch.Tensor):
+def tensor_to_display_image(img_tensor):
     img = denorm(img_tensor.detach().cpu()).permute(1, 2, 0).numpy()
     return img
 
 
 @st.cache_data(show_spinner=False)
-def load_attr_df(csv_path: str) -> pd.DataFrame:
+def load_attr_df(csv_path):
     df = pd.read_csv(csv_path)
     df.columns = [c.strip() for c in df.columns]
     if "image_id" not in df.columns:
@@ -134,7 +132,7 @@ def load_attr_df(csv_path: str) -> pd.DataFrame:
 
 
 @st.cache_resource(show_spinner=False)
-def load_model(model_path: str, z_dim: int, base: int, device_str: str):
+def load_model(model_path, z_dim, base, device_str):
     device = torch.device(device_str)
     model = ConvVAE128(in_channels=3, z_dim=z_dim, base=base).to(device)
     state_dict = torch.load(model_path, map_location=device)
@@ -144,7 +142,7 @@ def load_model(model_path: str, z_dim: int, base: int, device_str: str):
 
 
 @st.cache_resource(show_spinner=False)
-def load_person_segmentation_model(device_str: str):
+def load_person_segmentation_model(device_str):
     device = torch.device(device_str)
     try:
         from torchvision.models.segmentation import DeepLabV3_ResNet50_Weights
@@ -158,26 +156,26 @@ def load_person_segmentation_model(device_str: str):
     return seg_model
 
 
-def load_image_from_id(image_dir: str, image_id: str, device: torch.device) -> torch.Tensor:
+def load_image_from_id(image_dir, image_id, device):
     img_path = os.path.join(image_dir, image_id)
     img = Image.open(img_path).convert("RGB")
     return TFM(img).unsqueeze(0).to(device)
 
 
-def encode_image_id_to_latent(model, image_dir: str, image_id: str, device: torch.device) -> torch.Tensor:
+def encode_image_id_to_latent(model, image_dir, image_id, device):
     image_tensor = load_image_from_id(image_dir, image_id, device)
     with torch.no_grad():
         mu, _ = model.encode(image_tensor)
     return mu.squeeze(0).detach().cpu()
 
 
-def encode_tensor_to_latent(model, image_tensor: torch.Tensor, device: torch.device) -> torch.Tensor:
+def encode_tensor_to_latent(model, image_tensor, device):
     with torch.no_grad():
         mu, _ = model.encode(image_tensor.unsqueeze(0).to(device))
     return mu.squeeze(0).detach().cpu()
 
 
-def decode_latent_tensor(model, z_cpu: torch.Tensor, device: torch.device) -> torch.Tensor:
+def decode_latent_tensor(model, z_cpu, device):
     with torch.no_grad():
         z = z_cpu.unsqueeze(0).to(device)
         recon = model.decode(z).squeeze(0).detach().cpu()
@@ -185,12 +183,12 @@ def decode_latent_tensor(model, z_cpu: torch.Tensor, device: torch.device) -> to
 
 
 def remove_background_from_image_tensor(
-    img_tensor: torch.Tensor,
+    img_tensor,
     seg_model,
-    seg_device: torch.device,
-    threshold: float = DEFAULT_PERSON_MASK_THRESHOLD,
-    bg_value: float = DEFAULT_BG_VALUE,
-) -> torch.Tensor:
+    seg_device,
+    threshold=DEFAULT_PERSON_MASK_THRESHOLD,
+    bg_value=DEFAULT_BG_VALUE,
+):
     image_01 = denorm(img_tensor).to(seg_device)
     seg_input = SEGMENTATION_NORM(image_01).unsqueeze(0)
     with torch.no_grad():
@@ -206,12 +204,12 @@ def remove_background_from_image_tensor(
 def remove_background_from_latent(
     model,
     seg_model,
-    z_cpu: torch.Tensor,
-    vae_device: torch.device,
-    seg_device: torch.device,
-    threshold: float = DEFAULT_PERSON_MASK_THRESHOLD,
-    bg_value: float = DEFAULT_BG_VALUE,
-) -> torch.Tensor:
+    z_cpu,
+    vae_device,
+    seg_device,
+    threshold=DEFAULT_PERSON_MASK_THRESHOLD,
+    bg_value=DEFAULT_BG_VALUE,
+):
     decoded = decode_latent_tensor(model, z_cpu, vae_device)
     bg_removed = remove_background_from_image_tensor(
         decoded,
@@ -223,7 +221,7 @@ def remove_background_from_latent(
     return encode_tensor_to_latent(model, bg_removed, vae_device)
 
 
-def filter_exact_matches(df: pd.DataFrame, selected_attrs: Dict[str, int]) -> pd.DataFrame:
+def filter_exact_matches(df, selected_attrs):
     filtered = df.copy()
     for attr, value in selected_attrs.items():
         if attr in filtered.columns:
@@ -231,7 +229,7 @@ def filter_exact_matches(df: pd.DataFrame, selected_attrs: Dict[str, int]) -> pd
     return filtered
 
 
-def compute_partial_match_scores(df: pd.DataFrame, selected_attrs: Dict[str, int]) -> pd.DataFrame:
+def compute_partial_match_scores(df, selected_attrs):
     tmp = df.copy()
     if not selected_attrs:
         tmp["match_score"] = 0
@@ -245,7 +243,7 @@ def compute_partial_match_scores(df: pd.DataFrame, selected_attrs: Dict[str, int
     return tmp.sort_values("match_score", ascending=False)
 
 
-def build_selected_attrs_from_form(form_values: Dict[str, str]) -> Dict[str, int]:
+def build_selected_attrs_from_form(form_values):
     selected_attrs = {}
     for attr, mode in form_values.items():
         if mode == "Présent":
@@ -255,8 +253,8 @@ def build_selected_attrs_from_form(form_values: Dict[str, str]) -> Dict[str, int
     return selected_attrs
 
 
-def parse_env_file(env_path: str) -> Dict[str, str]:
-    parsed: Dict[str, str] = {}
+def parse_env_file(env_path):
+    parsed = {}
     if not os.path.exists(env_path):
         return parsed
 
@@ -279,7 +277,7 @@ def parse_env_file(env_path: str) -> Dict[str, str]:
     return parsed
 
 
-def load_app_config(env_path: str = APP_ENV_PATH) -> Dict[str, str]:
+def load_app_config(env_path=APP_ENV_PATH):
     config = {
         "mistral_api_key": "",
         "mistral_model": DEFAULT_MISTRAL_MODEL,
@@ -325,11 +323,11 @@ def load_app_config(env_path: str = APP_ENV_PATH) -> Dict[str, str]:
     return config
 
 
-def normalize_attr_name(attr_name: str) -> str:
+def normalize_attr_name(attr_name):
     return attr_name.strip().lower().replace("-", "_").replace(" ", "_")
 
 
-def normalize_attr_mode(raw_value) -> str:
+def normalize_attr_mode(raw_value):
     if raw_value is None:
         return "Indifférent"
 
@@ -344,7 +342,7 @@ def normalize_attr_mode(raw_value) -> str:
     return "Indifférent"
 
 
-def extract_first_json_object(text: str) -> Dict:
+def extract_first_json_object(text):
     candidate = text.strip()
 
     if candidate.startswith("```"):
@@ -365,13 +363,13 @@ def extract_first_json_object(text: str) -> Dict:
 
 
 def infer_form_values_from_prompt(
-    prompt_text: str,
-    available_attrs: List[str],
-    api_key: str,
-    model_name: str = DEFAULT_MISTRAL_MODEL,
-    endpoint: str = DEFAULT_MISTRAL_ENDPOINT,
-    timeout_seconds: int = DEFAULT_MISTRAL_TIMEOUT,
-) -> Dict[str, str]:
+    prompt_text,
+    available_attrs,
+    api_key,
+    model_name=DEFAULT_MISTRAL_MODEL,
+    endpoint=DEFAULT_MISTRAL_ENDPOINT,
+    timeout_seconds=DEFAULT_MISTRAL_TIMEOUT,
+):
     if not prompt_text.strip():
         raise ValueError("Le prompt est vide.")
     if not api_key.strip():
@@ -455,15 +453,15 @@ def infer_form_values_from_prompt(
 
 def initialize_population_from_attributes(
     model,
-    attr_df: pd.DataFrame,
-    image_dir: str,
-    selected_attrs: Dict[str, int],
-    device: torch.device,
-    pop_size: int = DEFAULT_POP_SIZE,
-) -> List[Individual]:
-    selected_ids: List[str] = []
-    selected_sources: List[str] = []
-    selected_scores: List[int] = []
+    attr_df,
+    image_dir,
+    selected_attrs,
+    device,
+    pop_size=DEFAULT_POP_SIZE,
+):
+    selected_ids = []
+    selected_sources = []
+    selected_scores = []
 
     exact_df = filter_exact_matches(attr_df, selected_attrs)
     if len(exact_df) > 0:
@@ -498,7 +496,7 @@ def initialize_population_from_attributes(
                 selected_sources.append("random")
                 selected_scores.append(0)
 
-    population: List[Individual] = []
+    population = []
     for image_id, source, score in zip(selected_ids, selected_sources, selected_scores):
         z = encode_image_id_to_latent(model, image_dir, image_id, device)
         population.append(Individual(image_id=image_id, z=z, source=source, score=score))
@@ -509,13 +507,13 @@ def initialize_population_from_attributes(
 # =========================
 # Genetic algorithm
 # =========================
-def crossover(parent1: torch.Tensor, parent2: torch.Tensor) -> torch.Tensor:
+def crossover(parent1, parent2):
     alpha = torch.rand(1).item()
     child = alpha * parent1 + (1.0 - alpha) * parent2
     return child
 
 
-def mutate(z: torch.Tensor, mutation_std: float = 0.15, clamp_value: float = LATENT_CLAMP) -> torch.Tensor:
+def mutate(z, mutation_std=0.15, clamp_value=LATENT_CLAMP):
     out = z + mutation_std * torch.randn_like(z)
     out = torch.clamp(out, -clamp_value, clamp_value)
     return out
@@ -523,11 +521,11 @@ def mutate(z: torch.Tensor, mutation_std: float = 0.15, clamp_value: float = LAT
 
 def project_latent_to_manifold(
     model,
-    z_cpu: torch.Tensor,
-    device: torch.device,
-    blend: float,
-    steps: int,
-) -> torch.Tensor:
+    z_cpu,
+    device,
+    blend,
+    steps,
+):
     z = z_cpu.unsqueeze(0).to(device)
     with torch.no_grad():
         for _ in range(max(0, steps)):
@@ -537,7 +535,7 @@ def project_latent_to_manifold(
     return z.squeeze(0).detach().cpu()
 
 
-def sort_population_by_fitness(population: List[Individual], fitness_scores: List[float]):
+def sort_population_by_fitness(population, fitness_scores):
     paired = list(zip(population, fitness_scores))
     paired.sort(key=lambda x: x[1], reverse=True)
     sorted_pop = [p[0] for p in paired]
@@ -546,20 +544,20 @@ def sort_population_by_fitness(population: List[Individual], fitness_scores: Lis
 
 
 def create_next_generation(
-    population: List[Individual],
-    selected_indices: List[int],
-    attr_df: pd.DataFrame,
+    population,
+    selected_indices,
+    attr_df,
     model,
-    image_dir: str,
-    device: torch.device,
-    pop_size: int,
-    elite_size: int,
-    mutation_std: float,
-    random_injection_count: int = 1,
-    latent_clamp: float = LATENT_CLAMP,
-    projection_blend: float = 0.65,
-    projection_steps: int = 1,
-) -> List[Individual]:
+    image_dir,
+    device,
+    pop_size,
+    elite_size,
+    mutation_std,
+    random_injection_count=1,
+    latent_clamp=LATENT_CLAMP,
+    projection_blend=0.65,
+    projection_steps=1,
+):
     if not selected_indices:
         raise ValueError("Tu dois sélectionner au moins un individu.")
 
@@ -568,7 +566,7 @@ def create_next_generation(
         fitness_scores[idx] = float(len(selected_indices) - rank)
 
     population, fitness_scores = sort_population_by_fitness(population, fitness_scores)
-    next_population: List[Individual] = []
+    next_population = []
     elite_count = min(elite_size, len(population))
     for i in range(elite_count):
         elite = population[i]
@@ -652,7 +650,7 @@ def init_session_state():
 # =========================
 
 
-def render_population(model, population: List[Individual], device: torch.device):
+def render_population(model, population, device):
     if not population:
         return None
 
@@ -705,20 +703,20 @@ def reset_session_state():
 
 
 def advance_generation_from_current_selection(
-    population: List[Individual],
-    attr_df: pd.DataFrame,
+    population,
+    attr_df,
     model,
-    image_dir: str,
-    device: torch.device,
-    pop_size: int,
-    elite_size: int,
-    mutation_std: float,
-    random_injection_count: int,
-    latent_clamp: float,
-    projection_blend: float,
-    projection_steps: int,
-    remove_parent_background: bool,
-    person_mask_threshold: float,
+    image_dir,
+    device,
+    pop_size,
+    elite_size,
+    mutation_std,
+    random_injection_count,
+    latent_clamp,
+    projection_blend,
+    projection_steps,
+    remove_parent_background,
+    person_mask_threshold,
     seg_model=None,
 ):
     if st.session_state.clicked_index is None:
