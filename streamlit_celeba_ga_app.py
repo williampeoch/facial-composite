@@ -861,7 +861,7 @@ def main():
         face_description_prompt = st.text_input(
             "Description du visage",
             key="face_description_prompt",
-            placeholder="Ex: femme jeune, cheveux blonds, lunettes, sourire léger, pas de barbe",
+            placeholder="Ex: Homme d'une cinquantaine d'années, cheveux bruns, qui porte des lunettes.",
             help="Appuie sur Entrée pour lancer la génération.",
         )
         generate_from_prompt = st.form_submit_button("Générer les visages", type="primary")
