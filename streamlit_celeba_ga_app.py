@@ -1,6 +1,5 @@
 import json
 import os
-import random
 from pathlib import Path
 from urllib import error, request
 
@@ -10,6 +9,8 @@ import torch
 import torch.nn as nn
 from PIL import Image
 from torchvision import models, transforms
+
+from celeba_ga import Individual, create_next_generation, initialize_population_from_attributes
 
 # =========================
 # Config
@@ -102,14 +103,6 @@ class ConvVAE128(nn.Module):
         return x_recon, mu, logvar
 
 
-class Individual:
-    def __init__(self, image_id, z, source, score):
-        self.image_id = image_id
-        self.z = z
-        self.source = source
-        self.score = score
-
-
 # =========================
 # Utilities
 # =========================
@@ -125,7 +118,10 @@ def tensor_to_display_image(img_tensor):
 @st.cache_data(show_spinner=False)
 def load_attr_df(csv_path):
     df = pd.read_csv(csv_path)
-    df.columns = [c.strip() for c in df.columns]
+    cleaned_columns = []
+    for col in df.columns:
+        cleaned_columns.append(col.strip())
+    df.columns = cleaned_columns
     if "image_id" not in df.columns:
         raise ValueError("Le CSV doit contenir une colonne 'image_id'.")
     return df
@@ -219,28 +215,6 @@ def remove_background_from_latent(
         bg_value=bg_value,
     )
     return encode_tensor_to_latent(model, bg_removed, vae_device)
-
-
-def filter_exact_matches(df, selected_attrs):
-    filtered = df.copy()
-    for attr, value in selected_attrs.items():
-        if attr in filtered.columns:
-            filtered = filtered[filtered[attr] == value]
-    return filtered
-
-
-def compute_partial_match_scores(df, selected_attrs):
-    tmp = df.copy()
-    if not selected_attrs:
-        tmp["match_score"] = 0
-        return tmp
-
-    score = pd.Series(0, index=tmp.index)
-    for attr, value in selected_attrs.items():
-        if attr in tmp.columns:
-            score += (tmp[attr] == value).astype(int)
-    tmp["match_score"] = score
-    return tmp.sort_values("match_score", ascending=False)
 
 
 def build_selected_attrs_from_form(form_values):
@@ -346,7 +320,10 @@ def extract_first_json_object(text):
     candidate = text.strip()
 
     if candidate.startswith("```"):
-        lines = [line for line in candidate.splitlines() if not line.strip().startswith("```")]
+        lines = []
+        for line in candidate.splitlines():
+            if not line.strip().startswith("```"):
+                lines.append(line)
         candidate = "\n".join(lines).strip()
 
     try:
@@ -439,8 +416,13 @@ def infer_form_values_from_prompt(
     if not isinstance(attributes_payload, dict):
         raise RuntimeError("JSON Mistral invalide: clé 'attributes' absente ou invalide.")
 
-    mapped = {attr: "Indifférent" for attr in available_attrs}
-    allowed_map = {normalize_attr_name(attr): attr for attr in available_attrs}
+    mapped = {}
+    for attr in available_attrs:
+        mapped[attr] = "Indifférent"
+
+    allowed_map = {}
+    for attr in available_attrs:
+        allowed_map[normalize_attr_name(attr)] = attr
     for raw_attr_name, raw_mode in attributes_payload.items():
         normalized_name = normalize_attr_name(str(raw_attr_name))
         attr_name = allowed_map.get(normalized_name)
@@ -451,74 +433,9 @@ def infer_form_values_from_prompt(
     return mapped
 
 
-def initialize_population_from_attributes(
-    model,
-    attr_df,
-    image_dir,
-    selected_attrs,
-    device,
-    pop_size=DEFAULT_POP_SIZE,
-):
-    selected_ids = []
-    selected_sources = []
-    selected_scores = []
-
-    exact_df = filter_exact_matches(attr_df, selected_attrs)
-    if len(exact_df) > 0:
-        exact_sample = exact_df.sample(n=min(pop_size, len(exact_df)), replace=False)
-        for image_id in exact_sample["image_id"].tolist():
-            selected_ids.append(image_id)
-            selected_sources.append("exact")
-            selected_scores.append(len(selected_attrs))
-
-    if len(selected_ids) < pop_size:
-        scored_df = compute_partial_match_scores(attr_df, selected_attrs)
-        for _, row in scored_df.iterrows():
-            image_id = row["image_id"]
-            if image_id in selected_ids:
-                continue
-            if row["match_score"] <= 0 and selected_attrs:
-                break
-            selected_ids.append(image_id)
-            selected_sources.append("partial" if selected_attrs else "random")
-            selected_scores.append(int(row["match_score"]))
-            if len(selected_ids) == pop_size:
-                break
-
-    if len(selected_ids) < pop_size:
-        remaining_df = attr_df[~attr_df["image_id"].isin(selected_ids)]
-        n_missing = pop_size - len(selected_ids)
-        if len(remaining_df) > 0:
-            sample_n = min(n_missing, len(remaining_df))
-            random_sample = remaining_df.sample(n=sample_n, replace=False)
-            for image_id in random_sample["image_id"].tolist():
-                selected_ids.append(image_id)
-                selected_sources.append("random")
-                selected_scores.append(0)
-
-    population = []
-    for image_id, source, score in zip(selected_ids, selected_sources, selected_scores):
-        z = encode_image_id_to_latent(model, image_dir, image_id, device)
-        population.append(Individual(image_id=image_id, z=z, source=source, score=score))
-
-    return population
-
-
 # =========================
-# Genetic algorithm
+# Latent projection
 # =========================
-def crossover(parent1, parent2):
-    alpha = torch.rand(1).item()
-    child = alpha * parent1 + (1.0 - alpha) * parent2
-    return child
-
-
-def mutate(z, mutation_std=0.15, clamp_value=LATENT_CLAMP):
-    out = z + mutation_std * torch.randn_like(z)
-    out = torch.clamp(out, -clamp_value, clamp_value)
-    return out
-
-
 def project_latent_to_manifold(
     model,
     z_cpu,
@@ -533,98 +450,6 @@ def project_latent_to_manifold(
             mu, _ = model.encode(recon)
             z = (1.0 - blend) * z + blend * mu
     return z.squeeze(0).detach().cpu()
-
-
-def sort_population_by_fitness(population, fitness_scores):
-    paired = list(zip(population, fitness_scores))
-    paired.sort(key=lambda x: x[1], reverse=True)
-    sorted_pop = [p[0] for p in paired]
-    sorted_scores = [p[1] for p in paired]
-    return sorted_pop, sorted_scores
-
-
-def create_next_generation(
-    population,
-    selected_indices,
-    attr_df,
-    model,
-    image_dir,
-    device,
-    pop_size,
-    elite_size,
-    mutation_std,
-    random_injection_count=1,
-    latent_clamp=LATENT_CLAMP,
-    projection_blend=0.65,
-    projection_steps=1,
-):
-    if not selected_indices:
-        raise ValueError("Tu dois sélectionner au moins un individu.")
-
-    fitness_scores = [0.0] * len(population)
-    for rank, idx in enumerate(selected_indices):
-        fitness_scores[idx] = float(len(selected_indices) - rank)
-
-    population, fitness_scores = sort_population_by_fitness(population, fitness_scores)
-    next_population = []
-    elite_count = min(elite_size, len(population))
-    for i in range(elite_count):
-        elite = population[i]
-        elite_z = elite.z.clone()
-        if projection_blend > 0 and projection_steps > 0:
-            elite_z = project_latent_to_manifold(
-                model=model,
-                z_cpu=elite_z,
-                device=device,
-                blend=projection_blend,
-                steps=projection_steps,
-            )
-        next_population.append(
-            Individual(
-                image_id=elite.image_id,
-                z=elite_z,
-                source=f"elite:{elite.source}",
-                score=elite.score,
-            )
-        )
-
-    parent_pool_size = max(2, min(len(selected_indices), len(population)))
-    parent_pool = population[:parent_pool_size]
-
-    injections = min(random_injection_count, max(0, pop_size - len(next_population)))
-    if injections > 0:
-        remaining_df = attr_df.sample(n=injections, replace=False)
-        for image_id in remaining_df["image_id"].tolist():
-            z = encode_image_id_to_latent(model, image_dir, image_id, device)
-            next_population.append(
-                Individual(image_id=image_id, z=z, source="random_injected", score=0)
-            )
-
-    child_idx = 0
-    while len(next_population) < pop_size:
-        p1 = random.choice(parent_pool)
-        p2 = random.choice(parent_pool)
-        child_z = crossover(p1.z, p2.z)
-        child_z = mutate(child_z, mutation_std=mutation_std, clamp_value=latent_clamp)
-        if projection_blend > 0 and projection_steps > 0:
-            child_z = project_latent_to_manifold(
-                model=model,
-                z_cpu=child_z,
-                device=device,
-                blend=projection_blend,
-                steps=projection_steps,
-            )
-        next_population.append(
-            Individual(
-                image_id="child_gen",
-                z=child_z,
-                source=f"child_{child_idx}",
-                score=0,
-            )
-        )
-        child_idx += 1
-
-    return next_population[:pop_size]
 
 
 # =========================
@@ -655,7 +480,9 @@ def render_population(model, population, device):
         return None
 
     st.subheader(f"Population courante — génération {st.session_state.generation}")
-    decoded_images = [decode_latent_tensor(model, ind.z, device) for ind in population]
+    decoded_images = []
+    for ind in population:
+        decoded_images.append(decode_latent_tensor(model, ind.z, device))
 
     pop_len = len(population)
     if pop_len <= 4:
@@ -742,20 +569,32 @@ def advance_generation_from_current_selection(
             score=selected_parent.score,
         )
 
+    projection_fn = None
+    if projection_blend > 0 and projection_steps > 0:
+        projection_fn = lambda z_cpu: project_latent_to_manifold(
+            model=model,
+            z_cpu=z_cpu,
+            device=device,
+            blend=projection_blend,
+            steps=projection_steps,
+        )
+
     next_population = create_next_generation(
         population=working_population,
         selected_indices=[selected_idx],
         attr_df=attr_df,
-        model=model,
-        image_dir=image_dir,
-        device=device,
         pop_size=pop_size,
         elite_size=elite_size,
         mutation_std=mutation_std,
+        encode_image_id_to_latent=lambda image_id: encode_image_id_to_latent(
+            model=model,
+            image_dir=image_dir,
+            image_id=image_id,
+            device=device,
+        ),
         random_injection_count=random_injection_count,
         latent_clamp=latent_clamp,
-        projection_blend=projection_blend,
-        projection_steps=projection_steps,
+        project_latent=projection_fn,
     )
     st.session_state.population = next_population
     st.session_state.generation += 1
@@ -849,7 +688,10 @@ def main():
         except Exception as exc:
             st.warning(f"Modèle de segmentation indisponible: {exc}")
 
-    available_form_attrs = [c for c in attr_df.columns if c != "image_id"]
+    available_form_attrs = []
+    for col in attr_df.columns:
+        if col != "image_id":
+            available_form_attrs.append(col)
     if not available_form_attrs:
         st.error("Aucun attribut exploitable trouvé dans le CSV (hors colonne image_id).")
         st.stop()
@@ -885,12 +727,15 @@ def main():
                     st.session_state.selected_attrs = selected_attrs
 
                     population = initialize_population_from_attributes(
-                        model=model,
                         attr_df=attr_df,
-                        image_dir=image_dir,
                         selected_attrs=selected_attrs,
-                        device=DEVICE,
                         pop_size=pop_size,
+                        encode_image_id_to_latent=lambda image_id: encode_image_id_to_latent(
+                            model=model,
+                            image_dir=image_dir,
+                            image_id=image_id,
+                            device=DEVICE,
+                        ),
                     )
                     st.session_state.population = population
                     st.session_state.generation = 0
@@ -944,12 +789,15 @@ def main():
         if st.button("Regénérer une population initiale avec les mêmes attributs"):
             try:
                 population = initialize_population_from_attributes(
-                    model=model,
                     attr_df=attr_df,
-                    image_dir=image_dir,
                     selected_attrs=st.session_state.selected_attrs,
-                    device=DEVICE,
                     pop_size=pop_size,
+                    encode_image_id_to_latent=lambda image_id: encode_image_id_to_latent(
+                        model=model,
+                        image_dir=image_dir,
+                        image_id=image_id,
+                        device=DEVICE,
+                    ),
                 )
                 st.session_state.population = population
                 st.session_state.generation = 0
