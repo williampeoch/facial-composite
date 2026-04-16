@@ -70,10 +70,10 @@ class PortraitApp:
                     "Male" : -1, "Mouth_Slightly_Open" : 0, "Mustache" : -1, "Narrow_Eyes" : -1, "No_Beard" : -1, "Oval_Face" : -1, "Pale_Skin" : -1, "Pointy_Nose" : -1, "Receding_Hairline" : -1, "Rosy_Cheeks" : -1,
                     "Sideburns" : 0, "Smiling" : 0, "Straight_Hair" : -1, "Wavy_Hair" : -1, "Wearing_Earrings" : 0, "Wearing_Hat" : 0, "Wearing_Lipstick" : -1, "Wearing_Necklace" : 0, "Wearing_Necktie" : 0, "Young" : -1}
 
-        self.cles = ["Sacs sous les yeux","Chauve", "Frange","Grosses lèvres", "Grand nez", "cheveux noirs", "cheveux blonds",
-                "cheveux bruns", "Sourcils épais", "Potelé", "double menton", "lunettes", "bouc", "cheveux gris", "Maquillage lourd",
-                "homme", "moustache", "yeux étroits", "pas de barde", "visage ovale", "peau pâle", "nez pointu", "calvitie naissante", "joues roses",
-                "cheveux lisses", "cheveux bouclés", "porte du rouge à lèvre", "jeune"]
+        self.cles = ["Sacs sous les yeux","Chauve", "Frange","Grosses lèvres", "Grand nez", "Cheveux noirs", "Cheveux blonds",
+                "Cheveux bruns", "Sourcils épais", "Potelé", "Double menton", "Lunettes", "Bouc", "Cheveux gris", "Maquillage lourd",
+                "Homme", "Moustache", "Yeux étroits", "Pas de barde", "Visage ovale", "Peau pâle", "Nez pointu", "Calvitie naissante", "Joues roses",
+                "Cheveux lisses", "Cheveux bouclés", "Porte du rouge à lèvre", "Jeune"]
 
         self.add_checkboxes()
 
@@ -93,8 +93,10 @@ class PortraitApp:
         self.welcome_page.pack(fill="both", expand=True)
 
     def add_checkboxes(self):
-        L=["Sacs sous les yeux","Chauve","Frange","Grosses lèvres", "Grand nez", "cheveux noirs", "cheveux blonds","cheveux bruns", "Sourcils épais", "Potelé", "double menton","lunettes", "bouc", "cheveux gris", "Maquillage lourd",
-                "homme", "moustache", "yeux étroits", "pas de barde","visage ovale", "peau pâle", "nez pointu", "calvitie naissante", "joues roses","cheveux lisses", "cheveux bouclés","porte du rouge à lèvre", "jeune"]
+        L=["Sacs sous les yeux","Chauve", "Frange","Grosses lèvres", "Grand nez", "Cheveux noirs", "Cheveux blonds",
+                "Cheveux bruns", "Sourcils épais", "Potelé", "Double menton", "Lunettes", "Bouc", "Cheveux gris", "Maquillage lourd",
+                "Homme", "Moustache", "Yeux étroits", "Pas de barde", "Visage ovale", "Peau pâle", "Nez pointu", "Calvitie naissante", "Joues roses",
+                "Cheveux lisses", "Cheveux bouclés", "Porte du rouge à lèvre", "Jeune"]
         max_per_line = 5  # nombre de boutons par ligne
         line_frame = None
 
@@ -125,7 +127,7 @@ class PortraitApp:
         print(self.attributs)
         #create new window
         self.nouvelle = tk.Toplevel(self.root)
-        self.nouvelle.title("Caractéristiques choisi")
+        self.nouvelle.title("Caractéristiques choisies")
         self.nouvelle.geometry(size)
 
         label = tk.Label(self.nouvelle, text="Voici les caractéristiques que vous avez sélectionnées",fg= TEXT, font=("Helvetica", 16, "bold"))
@@ -142,14 +144,14 @@ class PortraitApp:
                 display_text += f"\n {k}" #add characteristics to list
 
         if display_text == "": #if no selection made
-            display_text = "Aucune caractéristiques selectionnées"
+            display_text = "Aucune caractéristique selectionnée"
 
 
 
         label2 = tk.Label(self.nouvelle, text= display_text,fg="black", font=("Helvetica", 10))
         label2.pack(pady=5)
 
-        bouton2 = tk.Button(self.nouvelle, text ="suivant", bg = PRIMARY, fg = "white", font = ("Helvetica", 12, "bold"), padx = 10, pady = 5, relief = "flat", command= self.change_to_images)
+        bouton2 = tk.Button(self.nouvelle, text ="Suivant", bg = PRIMARY, fg = "white", font = ("Helvetica", 12, "bold"), padx = 10, pady = 5, relief = "flat", command= self.change_to_images)
         bouton2.pack()
 
     def change_to_images(self):
@@ -172,7 +174,7 @@ class PortraitApp:
         self.files = os.listdir(faces_path) #convert image files in path to list
 
         # title
-        title = tk.Label(self.images_page, text="Sélectionnez l'image la plus proche", font=("Helvetica", 16, "bold"), bg="#fafafa")
+        title = tk.Label(self.images_page, text="Sélectionnez l'image la plus ressemblante", font=("Helvetica", 16, "bold"), bg="#fafafa")
         title.pack(pady=10)
 
         # counter
