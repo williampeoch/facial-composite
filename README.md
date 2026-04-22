@@ -4,7 +4,7 @@ This project generates a facial composite from CelebA using a Tkinter UI and a V
 
 ## 1) Requirements
 
-- Python 3.10 or 3.11 recommended
+- Python 3.10 or 3.11 or 3.12 recommended
 - Git
 - (Optional) Kaggle account + API key to download CelebA automatically
 
@@ -13,9 +13,9 @@ This project generates a facial composite from CelebA using a Tkinter UI and a V
 From the project root:
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\\Scripts\\activate
-python -m pip install --upgrade pip
+python3 -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
