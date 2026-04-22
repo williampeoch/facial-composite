@@ -47,6 +47,15 @@ python scripts/prepare_celeba.py --source data/celeba-dataset --target celeba --
 
 ### Option B - Dataset already available locally
 
+If you want to download manually (without Kaggle CLI), use:
+
+- Dataset page: https://www.kaggle.com/datasets/jessicali9530/celeba-dataset
+- Download from your browser, unzip it (for example to `data/celeba-dataset`), then run:
+
+```bash
+python scripts/prepare_celeba.py --source data/celeba-dataset --target celeba
+```
+
 If you already have a local CelebA folder, run:
 
 ```bash
