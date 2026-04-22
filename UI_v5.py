@@ -4,6 +4,7 @@
 # page 3 : image selection connected to VAE + Genetic Algorithm
 #######################import libraries##########################################
 import os
+import sys
 import tkinter as tk
 from tkinter import messagebox
 
@@ -42,18 +43,88 @@ SEGMENTATION_MEAN = (0.485, 0.456, 0.406)
 SEGMENTATION_STD = (0.229, 0.224, 0.225)
 # ===========================================================================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FACE_CANDIDATE_DIRS = [
-    os.path.join(BASE_DIR, "faces"),
-    os.path.join(BASE_DIR, "celeba", "img_align_celeba", "img_align_celeba"),
-    os.path.join(BASE_DIR, "celeba", "img_align_celeba"),
-]
-ATTR_CANDIDATE_PATHS = [
-    os.path.join(BASE_DIR, "celeba", "list_attr_celeba.csv"),
-]
-MODEL_CANDIDATE_PATHS = [
-    os.path.join(BASE_DIR, "vae_128_epoch-10.pth"),
-]
+def get_base_dirs():
+    if getattr(sys, "frozen", False):
+        executable_dir = os.path.dirname(os.path.abspath(sys.executable))
+        return [
+            executable_dir,
+            os.path.dirname(executable_dir),
+        ]
+    return [os.path.dirname(os.path.abspath(__file__))]
+
+
+def _expand_path(raw_path):
+    if not raw_path:
+        return None
+    return os.path.abspath(os.path.expanduser(raw_path))
+
+
+def _dedupe_paths(paths):
+    deduped = []
+    seen = set()
+    for path in paths:
+        if not path:
+            continue
+        if path in seen:
+            continue
+        seen.add(path)
+        deduped.append(path)
+    return deduped
+
+
+BASE_DIRS = get_base_dirs()
+EXTRA_BASE_DIRS = []
+for base_dir in BASE_DIRS:
+    EXTRA_BASE_DIRS.extend(
+        [
+            os.path.join(base_dir, "data"),
+            os.path.join(base_dir, "datasets"),
+        ]
+    )
+
+CELEBA_DIR_ENV = _expand_path(os.environ.get("CELEBA_DIR"))
+CELEBA_FACES_DIR_ENV = _expand_path(os.environ.get("CELEBA_FACES_DIR"))
+CELEBA_ATTRS_PATH_ENV = _expand_path(os.environ.get("CELEBA_ATTRS_PATH"))
+VAE_WEIGHTS_PATH_ENV = _expand_path(os.environ.get("VAE_WEIGHTS_PATH"))
+
+if CELEBA_DIR_ENV:
+    EXTRA_BASE_DIRS.append(CELEBA_DIR_ENV)
+
+SEARCH_BASE_DIRS = _dedupe_paths(BASE_DIRS + EXTRA_BASE_DIRS)
+
+FACE_CANDIDATE_DIRS = []
+ATTR_CANDIDATE_PATHS = []
+MODEL_CANDIDATE_PATHS = []
+
+if CELEBA_FACES_DIR_ENV:
+    FACE_CANDIDATE_DIRS.append(CELEBA_FACES_DIR_ENV)
+
+for base_dir in SEARCH_BASE_DIRS:
+    FACE_CANDIDATE_DIRS.extend(
+        [
+            os.path.join(base_dir, "faces"),
+            os.path.join(base_dir, "celeba", "img_align_celeba", "img_align_celeba"),
+            os.path.join(base_dir, "celeba", "img_align_celeba"),
+            os.path.join(base_dir, "img_align_celeba", "img_align_celeba"),
+            os.path.join(base_dir, "img_align_celeba"),
+        ]
+    )
+    ATTR_CANDIDATE_PATHS.extend(
+        [
+            os.path.join(base_dir, "celeba", "list_attr_celeba.csv"),
+            os.path.join(base_dir, "list_attr_celeba.csv"),
+        ]
+    )
+    MODEL_CANDIDATE_PATHS.append(os.path.join(base_dir, "vae_128_epoch-10.pth"))
+
+if CELEBA_ATTRS_PATH_ENV:
+    ATTR_CANDIDATE_PATHS.insert(0, CELEBA_ATTRS_PATH_ENV)
+if VAE_WEIGHTS_PATH_ENV:
+    MODEL_CANDIDATE_PATHS.insert(0, VAE_WEIGHTS_PATH_ENV)
+
+FACE_CANDIDATE_DIRS = _dedupe_paths(FACE_CANDIDATE_DIRS)
+ATTR_CANDIDATE_PATHS = _dedupe_paths(ATTR_CANDIDATE_PATHS)
+MODEL_CANDIDATE_PATHS = _dedupe_paths(MODEL_CANDIDATE_PATHS)
 
 
 def resolve_dir(candidates):
@@ -625,10 +696,22 @@ class PortraitApp:
             )
             return False
         if attrs_path is None:
-            messagebox.showerror("Erreur", "Fichier d'attributs CelebA introuvable.")
+            messagebox.showerror(
+                "Erreur",
+                "Fichier d'attributs CelebA introuvable.\n"
+                "Vérifie CELEBA_ATTRS_PATH ou CELEBA_DIR.\n"
+                "Chemins testés:\n- "
+                + "\n- ".join(ATTR_CANDIDATE_PATHS),
+            )
             return False
         if model_path is None:
-            messagebox.showerror("Erreur", "Checkpoint VAE introuvable.")
+            messagebox.showerror(
+                "Erreur",
+                "Checkpoint VAE introuvable.\n"
+                "Vérifie VAE_WEIGHTS_PATH.\n"
+                "Chemins testés:\n- "
+                + "\n- ".join(MODEL_CANDIDATE_PATHS),
+            )
             return False
 
         try:

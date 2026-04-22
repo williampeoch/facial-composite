@@ -2,3 +2,12 @@ app_config.toml
 __pycache__/
 .venv/
 .env.local
+.env
+.DS_Store
+build/
+dist/
+release/
+*.spec
+celeba/
+data/
+*.zip
