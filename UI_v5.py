@@ -3,6 +3,8 @@
 # page 2 : criteria checkboxes
 # page 3 : image selection connected to VAE + Genetic Algorithm
 #######################import libraries##########################################
+"""Tkinter portrait composite app powered by a VAE and a genetic algorithm."""
+
 import os
 import sys
 import tkinter as tk
@@ -44,6 +46,8 @@ SEGMENTATION_STD = (0.229, 0.224, 0.225)
 # ===========================================================================
 
 def get_base_dirs():
+    """Return candidate base directories depending on script or bundled execution."""
+
     if getattr(sys, "frozen", False):
         executable_dir = os.path.dirname(os.path.abspath(sys.executable))
         return [
@@ -54,12 +58,16 @@ def get_base_dirs():
 
 
 def _expand_path(raw_path):
+    """Expand and normalize a user-provided path string."""
+
     if not raw_path:
         return None
     return os.path.abspath(os.path.expanduser(raw_path))
 
 
 def _dedupe_paths(paths):
+    """Preserve order while removing empty or duplicate paths."""
+
     deduped = []
     seen = set()
     for path in paths:
@@ -128,6 +136,8 @@ MODEL_CANDIDATE_PATHS = _dedupe_paths(MODEL_CANDIDATE_PATHS)
 
 
 def resolve_dir(candidates):
+    """Return the first existing directory from a list of candidates."""
+
     for candidate in candidates:
         if os.path.isdir(candidate):
             return candidate
@@ -135,6 +145,8 @@ def resolve_dir(candidates):
 
 
 def resolve_file(candidates):
+    """Return the first existing file from a list of candidates."""
+
     for candidate in candidates:
         if os.path.isfile(candidate):
             return candidate
@@ -160,7 +172,11 @@ TEXT_FONT = ("Helvetica", 11)
 
 ###################### VAE + GA BRIDGE #########################################
 class ConvVAE128(nn.Module):
+    """Convolutional VAE used to encode/decode 128x128 face images."""
+
     def __init__(self, in_channels=3, z_dim=256, base=64):
+        """Initialize encoder/decoder blocks and latent projection layers."""
+
         super().__init__()
 
         self.enc = nn.Sequential(
@@ -194,18 +210,26 @@ class ConvVAE128(nn.Module):
         )
 
     def encode(self, x):
+        """Encode an image batch into latent mean and log-variance tensors."""
+
         h = self.enc(x)
         h = h.view(h.size(0), -1)
         return self.fc_mu(h), self.fc_logvar(h)
 
     def decode(self, z):
+        """Decode latent vectors into reconstructed image tensors."""
+
         h = self.fc_dec(z)
         h = h.view(h.size(0), 512, 4, 4)
         return self.dec(h)
 
 
 class VAEGABridge:
+    """Bridge between UI actions and VAE/GA latent-space operations."""
+
     def __init__(self, faces_dir, attrs_csv, vae_weights):
+        """Load assets, initialize models, and prepare the attribute dataframe."""
+
         if not os.path.isdir(faces_dir):
             raise FileNotFoundError(f"Dossier images introuvable: {faces_dir}")
         if not os.path.isfile(attrs_csv):
@@ -244,9 +268,13 @@ class VAEGABridge:
         self._latent_cache = {}
 
     def _image_id_to_path(self, image_id):
+        """Resolve an image id to an absolute file path inside the faces directory."""
+
         return os.path.join(self.faces_dir, image_id)
 
     def load_original_image(self, image_id):
+        """Load an original dataset image as RGB PIL image if it exists."""
+
         path = self._image_id_to_path(image_id)
         if not os.path.isfile(path):
             return None
@@ -254,6 +282,8 @@ class VAEGABridge:
             return img.convert("RGB").copy()
 
     def _image_to_tensor(self, image_id):
+        """Load an image and convert it to normalized tensor format expected by the VAE."""
+
         path = self._image_id_to_path(image_id)
         if not os.path.isfile(path):
             raise FileNotFoundError(f"Image introuvable pour encodage: {path}")
@@ -267,6 +297,8 @@ class VAEGABridge:
         return tensor.to(self.device)
 
     def encode_image_id_to_latent(self, image_id):
+        """Encode a dataset image id to latent space, using an in-memory cache."""
+
         if image_id in self._latent_cache:
             return self._latent_cache[image_id].clone()
 
@@ -279,11 +311,15 @@ class VAEGABridge:
         return z.clone()
 
     def encode_tensor_to_latent(self, image_tensor):
+        """Encode a single image tensor to its latent mean representation."""
+
         with torch.no_grad():
             mu, _ = self.model.encode(image_tensor.unsqueeze(0).to(self.device))
         return mu.squeeze(0).detach().cpu()
 
     def decode_latent_to_pil(self, z):
+        """Decode latent vector(s) and return a RGB PIL image."""
+
         with torch.no_grad():
             z_batch = z.unsqueeze(0) if z.ndim == 1 else z
             recon = self.model.decode(z_batch.to(self.device)).squeeze(0).detach().cpu()
@@ -293,6 +329,8 @@ class VAEGABridge:
         return Image.fromarray(arr)
 
     def project_latent_to_manifold(self, z, blend=GA_PROJECTION_BLEND, steps=GA_PROJECTION_STEPS):
+        """Iteratively project a latent vector toward the model manifold via autoencoding."""
+
         if blend <= 0 or steps <= 0:
             return z
 
@@ -305,10 +343,14 @@ class VAEGABridge:
         return z_batch.squeeze(0).detach().cpu()
 
     def project_latent(self, z):
+        """Project and clamp a latent vector to keep GA exploration stable."""
+
         projected = self.project_latent_to_manifold(z)
         return torch.clamp(projected, -GA_LATENT_CLAMP, GA_LATENT_CLAMP)
 
     def _load_person_segmentation_model(self):
+        """Load the DeepLab model used to segment person foreground."""
+
         try:
             from torchvision.models.segmentation import DeepLabV3_ResNet50_Weights
 
@@ -322,6 +364,8 @@ class VAEGABridge:
 
     @staticmethod
     def _denorm(img_tensor):
+        """Map image tensor values from [-1, 1] back to [0, 1]."""
+
         return (img_tensor * 0.5 + 0.5).clamp(0, 1)
 
     def remove_background_from_image_tensor(
@@ -330,6 +374,8 @@ class VAEGABridge:
         threshold=GA_SEGMENTATION_THRESHOLD,
         bg_value=GA_SEGMENTATION_BG_VALUE,
     ):
+        """Remove background from a normalized image tensor using person segmentation."""
+
         if self.seg_model is None:
             return img_tensor
 
@@ -349,11 +395,15 @@ class VAEGABridge:
         return (fg_img * 2.0 - 1.0).detach().cpu()
 
     def remove_background_from_latent(self, z):
+        """Decode latent, remove background, and re-encode to latent space."""
+
         decoded = self.model.decode(z.unsqueeze(0).to(self.device)).squeeze(0).detach().cpu()
         bg_removed = self.remove_background_from_image_tensor(decoded)
         return self.encode_tensor_to_latent(bg_removed)
 
     def initialize_population(self, selected_attrs, pop_size):
+        """Initialize GA population from selected attributes and available images."""
+
         used_attrs = {k: int(v) for k, v in selected_attrs.items() if k in self.attr_df.columns}
         return initialize_population_from_attributes(
             attr_df=self.attr_df,
@@ -371,6 +421,8 @@ class VAEGABridge:
         mutation_std=GA_MUTATION_STD,
         random_injection_count=GA_RANDOM_INJECTION_COUNT,
     ):
+        """Evolve a population after a user selection, optionally cleaning parent background."""
+
         working_population = population
         if GA_REMOVE_PARENT_BACKGROUND and self.seg_model is not None and selected_indices:
             selected_idx = selected_indices[0]
@@ -400,7 +452,11 @@ class VAEGABridge:
 
 ######################app class configuration####################################
 class PortraitApp:
+    """Tkinter application orchestrating criteria entry and GA image selection."""
+
     def __init__(self, root):
+        """Initialize window state, pages, and base UI layout."""
+
         self.root = root
         self.root.title(title)
         self.root.geometry(size)
@@ -423,6 +479,8 @@ class PortraitApp:
 
     ######################## WELCOME PAGE #######################################
     def create_welcome_page(self):
+        """Build the welcome page with instructions and start action."""
+
         title_label = tk.Label(
             self.welcome_page,
             text="BIENVENUE",
@@ -459,11 +517,15 @@ class PortraitApp:
         start_btn.pack(pady=30)
 
     def change_to_entries(self):
+        """Switch from welcome page to criteria entry page."""
+
         self.welcome_page.pack_forget()
         self.entries_page.pack(fill="both", expand=True)
 
     ######################## ENTRIES PAGE #######################################
     def create_entries_page(self):
+        """Build the criteria page and initialize attribute selection state."""
+
         titre = tk.Label(
             self.entries_page,
             text="Veuillez cocher les caractéristiques qui correspondent à la personne que vous cherchez",
@@ -582,10 +644,14 @@ class PortraitApp:
         bouton_retour_welcome.pack(pady=5)
 
     def retour_welcome(self):
+        """Return from criteria page to the welcome page."""
+
         self.entries_page.pack_forget()
         self.welcome_page.pack(fill="both", expand=True)
 
     def add_checkboxes(self):
+        """Render checkbox controls for each selectable facial attribute."""
+
         l_values = [
             "Sacs sous les yeux",
             "Chauve",
@@ -633,6 +699,8 @@ class PortraitApp:
             ).pack(side="left", padx=10)
 
     def on_checkbox_change(self, checkbox_value, variable):
+        """Update selection dictionary when a checkbox toggles."""
+
         cocher = variable.get()
         if cocher:
             self.resultat[checkbox_value] = 1
@@ -640,6 +708,8 @@ class PortraitApp:
             self.resultat[checkbox_value] = -1
 
     def button_clicked(self):
+        """Validate current selections and open the confirmation popup."""
+
         i = 0
         for k in self.attributs.keys():
             if self.attributs[k] != 0:
@@ -686,6 +756,8 @@ class PortraitApp:
         bouton2.pack()
 
     def _ensure_backend_ready(self):
+        """Lazy-load and validate backend resources before GA operations."""
+
         if self.backend is not None:
             return True
 
@@ -731,6 +803,8 @@ class PortraitApp:
             self.root.config(cursor="")
 
     def change_to_images(self):
+        """Switch to image-selection page and start/reset the GA loop."""
+
         if not self._ensure_backend_ready():
             return
 
@@ -743,10 +817,14 @@ class PortraitApp:
         self.reset()
 
     def _selected_attributes_for_ga(self):
+        """Return attributes that are constrained by the user selection."""
+
         return {k: v for k, v in self.attributs.items() if v != 0}
 
     @staticmethod
     def _clone_population(population):
+        """Deep-copy a population to keep history snapshots immutable."""
+
         cloned = []
         for ind in population:
             cloned.append(
@@ -761,6 +839,8 @@ class PortraitApp:
 
     ############# IMAGES PAGE ###################################################
     def create_images_page(self):
+        """Build the image selection page and attach action buttons."""
+
         self.images = []  # store rendered images
         self.current_population = []
         self.history = []  # list of tuple(round, population)
@@ -871,10 +951,14 @@ class PortraitApp:
         ).pack(side="right", padx=10)
 
     def back_entries(self):  # back to entries page
+        """Go back from image-selection page to criteria entry page."""
+
         self.images_page.pack_forget()
         self.entries_page.pack(fill="both", expand=True)
 
     def _render_population(self):
+        """Render the current population in the UI and refresh round counter."""
+
         if not self.current_population:
             return
 
@@ -895,6 +979,8 @@ class PortraitApp:
         self.counter_label.config(text=f"Round: {self.round}")
 
     def _initialize_population_from_selection(self):
+        """Initialize the first generation from user-selected attributes."""
+
         selected_attrs = self._selected_attributes_for_ga()
         pop_size = len(self.labels)
 
@@ -907,6 +993,8 @@ class PortraitApp:
         self._render_population()
 
     def next_images(self, index):
+        """Advance one GA generation using the selected candidate index."""
+
         if not self.current_population:
             return
 
@@ -932,6 +1020,8 @@ class PortraitApp:
                 self._render_population()
 
     def select_image(self, index):  # final image selected - new window with image shown
+        """Open a popup displaying the final chosen image."""
+
         if index < 0 or index >= len(self.images):
             return
 
@@ -947,6 +1037,8 @@ class PortraitApp:
         tk.Label(new_win, text=f"Trouvé en {self.round} tours", font=("Helvetica", 12)).pack(pady=5)
 
     def go_back(self):  # back button selected - show previous generation
+        """Restore the previous generation from history."""
+
         if not self.history:
             return
 
@@ -956,6 +1048,8 @@ class PortraitApp:
         self._render_population()
 
     def reset(self):  # reset button selected - restart from selected attributes
+        """Restart GA state from current attributes and render generation one."""
+
         if not self._ensure_backend_ready():
             return
 

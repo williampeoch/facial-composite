@@ -22,6 +22,8 @@ CSV_NAMES = [
 
 
 def find_existing_file(root: Path, file_name: str) -> Path | None:
+    """Return the first file named ``file_name`` under ``root``, if any."""
+
     direct = root / file_name
     if direct.is_file():
         return direct
@@ -33,6 +35,8 @@ def find_existing_file(root: Path, file_name: str) -> Path | None:
 
 
 def find_images_dir(root: Path) -> Path | None:
+    """Locate a CelebA image directory containing JPG files."""
+
     candidates = [
         root / "img_align_celeba" / "img_align_celeba",
         root / "img_align_celeba",
@@ -51,6 +55,8 @@ def find_images_dir(root: Path) -> Path | None:
 
 
 def copy_csv_files(source_root: Path, target_root: Path) -> None:
+    """Copy expected CelebA CSV metadata files from source to target."""
+
     for csv_name in CSV_NAMES:
         src = find_existing_file(source_root, csv_name)
         if not src:
@@ -67,6 +73,8 @@ def copy_csv_files(source_root: Path, target_root: Path) -> None:
 
 
 def link_or_copy_images(source_images_dir: Path, target_images_dir: Path, copy_images: bool) -> None:
+    """Create a symlink to images or copy them when symlink creation is unavailable."""
+
     target_images_dir.parent.mkdir(parents=True, exist_ok=True)
 
     if target_images_dir.exists() or target_images_dir.is_symlink():
@@ -93,6 +101,8 @@ def link_or_copy_images(source_images_dir: Path, target_images_dir: Path, copy_i
 
 
 def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for dataset preparation."""
+
     parser = argparse.ArgumentParser(description="Prepare CelebA dataset structure for this project")
     parser.add_argument(
         "--source",
@@ -113,6 +123,8 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    """Prepare the dataset layout and return a process exit code."""
+
     args = parse_args()
 
     source_root = Path(args.source).expanduser().resolve()

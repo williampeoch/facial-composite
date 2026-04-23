@@ -1,3 +1,5 @@
+"""Genetic algorithm utilities for evolving portrait candidates in latent space."""
+
 import random
 
 import pandas as pd
@@ -7,7 +9,11 @@ DEFAULT_LATENT_CLAMP = 3.0
 
 
 class Individual:
+    """Container representing one candidate portrait in the population."""
+
     def __init__(self, image_id, z, source, score):
+        """Store image identifier, latent code, provenance tag, and fitness score."""
+
         self.image_id = image_id
         self.z = z
         self.source = source
@@ -15,6 +21,8 @@ class Individual:
 
 
 def filter_exact_matches(df, selected_attrs):
+    """Return rows that exactly match every selected attribute."""
+
     filtered = df.copy()
     for attr, value in selected_attrs.items():
         if attr in filtered.columns:
@@ -23,6 +31,8 @@ def filter_exact_matches(df, selected_attrs):
 
 
 def compute_partial_match_scores(df, selected_attrs):
+    """Compute a per-row attribute match score and return rows sorted by best score."""
+
     tmp = df.copy()
     if not selected_attrs:
         tmp["match_score"] = 0
@@ -42,6 +52,8 @@ def initialize_population_from_attributes(
     pop_size,
     encode_image_id_to_latent,
 ):
+    """Create an initial population from exact, partial, and random CelebA matches."""
+
     selected_ids = []
     selected_sources = []
     selected_scores = []
@@ -88,6 +100,8 @@ def initialize_population_from_attributes(
 
 
 def crossover(parent1, parent2):
+    """Generate a child latent vector via random convex interpolation of two parents."""
+
     alpha = torch.rand(1).item()
     child = alpha * parent1 + (1.0 - alpha) * parent2
     return child
@@ -98,12 +112,16 @@ def mutate(
     mutation_std=0.15,
     clamp_value=DEFAULT_LATENT_CLAMP,
 ):
+    """Apply Gaussian noise to a latent vector and clamp it to a bounded range."""
+
     out = z + mutation_std * torch.randn_like(z)
     out = torch.clamp(out, -clamp_value, clamp_value)
     return out
 
 
 def sort_population_by_fitness(population, fitness_scores):
+    """Sort individuals and scores by descending fitness."""
+
     paired = list(zip(population, fitness_scores))
     paired.sort(key=lambda x: x[1], reverse=True)
     sorted_pop = [p[0] for p in paired]
@@ -123,6 +141,8 @@ def create_next_generation(
     latent_clamp=DEFAULT_LATENT_CLAMP,
     project_latent=None,
 ):
+    """Build the next generation with elitism, optional random injections, and offspring."""
+
     if not selected_indices:
         raise ValueError("Tu dois sélectionner au moins un individu.")
 
