@@ -99,9 +99,3 @@ facial-composite-final/
         000001.jpg
         ...
 ```
-
-## 7) Important notes
-
-- On first run, `torchvision` may download a segmentation model (DeepLab) used for background removal.
-- Do not version `celeba/` in Git (very large volume).
-- Never commit a `.env.local` file containing API keys.
