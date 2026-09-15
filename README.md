@@ -1,6 +1,25 @@
-# Facial Composite - Quick Setup
+# Facial Composite
 
-This project generates a facial composite from CelebA using a Tkinter UI and a VAE + genetic algorithm pipeline.
+An interactive facial composite system built with PyTorch and Tkinter. The application combines a convolutional VAE, semantic filtering on CelebA, latent space search, and a genetic algorithm so that a user can iteratively refine a generated portrait.
+
+## How it works
+
+1. The user selects visible facial attributes.
+2. CelebA examples are filtered and ranked to initialize a population.
+3. The VAE maps candidate faces to a continuous latent space.
+4. The user selects preferred candidates in the interface.
+5. The genetic algorithm creates a new generation through selection, crossover, mutation, and latent projection.
+
+The process keeps the user in the loop while exploring the learned face space.
+
+## Main components
+
+- `UI_v5.py` contains the interface, VAE architecture, image processing, and application workflow
+- `celeba_ga.py` contains population initialization, ranking, crossover, mutation, and generation logic
+- `scripts/prepare_celeba.py` prepares a consistent local CelebA layout
+- `vae_128_epoch-10.pth` contains the current VAE weights
+
+## Quick setup
 
 ## 1) Requirements
 
